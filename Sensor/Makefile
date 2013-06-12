@@ -9,8 +9,14 @@ CFLAGS += -I$(TOSDIR)/lib/net/ctp
 CFLAGS += -I$(TOSDIR)/lib/net/le
 CFLAGS += -I./lib
 
-CFLAGS += -DUSING_MIC
 CFLAGS += -lm
+
+CFLAGS += -I$(TOSDIR)/lib/printf
+
+#功能的定义
+CFLAGS += -DUSING_MIC
+#CFLAGS += -DUSING_REMOTE_PRINTF
+CFLAGS += -DUSING_SERIAL_PRINTF
 
 
 include $(MAKERULES)

@@ -1,6 +1,15 @@
 #include "Timer.h"
+
+#ifdef USING_SERIAL_PRINTF
 #include "printf.h"
+#endif
+
+#ifdef USING_REMOTE_PRINTF
+#include "irprintf.h"
+#endif
+
 #include "math.h"
+
 
 module SensorC {
 	uses {
@@ -44,13 +53,11 @@ implementation {
 		gl.sensor_period[TYPE_YL69]    = DEFAULT_YL69_PERIOD;
 		gl.sensor_period[TYPE_LIGHT]   = DEFAULT_LIGHT_PERIOD;
 		gl.sensor_period[TYPE_TEMP]    = DEFAULT_TEMP_PERIOD;
-		gl.sensor_period[TYPE_MIC]    = DEFAULT_MIC_PERIOD;
 
 		gl.sensor_threshold[TYPE_DS18B20] = DEFAULT_DS18B20_THRESHOLD;
 		gl.sensor_threshold[TYPE_YL69]    = DEFAULT_YL69_THRESHOLD;
 		gl.sensor_threshold[TYPE_LIGHT]   = DEFAULT_LIGHT_THRESHOLD;
 		gl.sensor_threshold[TYPE_TEMP]    = DEFAULT_TEMP_THRESHOLD;
-		gl.sensor_threshold[TYPE_MIC]    = DEFAULT_MIC_THRESHOLD;
 		
 		gl.sensor_flag = 0;	
 		gl.sv_switch = 0;
@@ -63,6 +70,8 @@ implementation {
 		gl.light_lasttime = 0;
 
 #ifdef USING_MIC
+		gl.sensor_period[TYPE_MIC]    = DEFAULT_MIC_PERIOD;
+		gl.sensor_threshold[TYPE_MIC]    = DEFAULT_MIC_THRESHOLD;
 		memset(gl.mic_reading, 0, sizeof(gl.mic_reading));
 		gl.mic_reading_count = 0;
 		gl.mic_avr = 0;
@@ -90,7 +99,9 @@ implementation {
 		if (err == SUCCESS) {
 			call CtpControl.start();
 			call DripControl.start();
+#ifdef USING_REMOTE_PRINTF
 			call PrintfControl.start();
+#endif
 #ifdef USING_MIC
 			call MicControl.start();
 #endif
@@ -98,8 +109,7 @@ implementation {
 	//				  START_READING_LIGHT   |
 	//				  START_READING_TEMP;
 	//				  START_READING_DS18B20; 
-	//		gl.sensor_flag |= START_READING_LIGHT | START_READING_TEMP;
-	//		call SensorTimer.startOneShot(0);
+			gl.sensor_flag |= START_READING_LIGHT | START_READING_TEMP;
 
 			// 初始时间， 保证每一个传感器都有自己的时间节点
 			// 在每个时间节点做自己的事情
@@ -111,6 +121,7 @@ implementation {
 #ifdef USING_MIC
 			gl.mic_lasttime = call SensorTimer.getNow();
 #endif
+			call SensorTimer.startPeriodic(100);
 		} else {
 			report_error();
 		}
@@ -120,7 +131,6 @@ implementation {
 	event void MicControl.startDone(error_t err) {
 		if (err == SUCCESS) {
 			gl.sensor_flag |= START_READING_MICROPHONE;
-			call SensorTimer.startOneShot(DEFAULT_MIC_PERIOD);
 		} else {
 			report_error();
 		}
@@ -134,6 +144,7 @@ implementation {
 	event void SensorTimer.fired() {
 		uint16_t local_time = call SensorTimer.getNow();
 		report_sensor_working();
+		printf("sensor timer fired\n");
 		if (gl.sensor_flag & START_READING_DS18B20) {
 			if (local_time - gl.ds18b20_lasttime < gl.sensor_period[TYPE_DS18B20]) { return; }
 			call DS18B20Switch.open();
@@ -266,7 +277,6 @@ implementation {
 
 			ctp_send_sensor_msg(&sm);
 		}
-		call SensorTimer.startOneShot(gl.sensor_period[TYPE_DS18B20]);
 	}
 
 	event void Humidity.readDone(error_t err, uint16_t val) {
@@ -291,7 +301,6 @@ implementation {
 			sm.sensor_value = val;
 			ctp_send_sensor_msg(&sm);
 		}
-		call SensorTimer.startOneShot(gl.sensor_period[TYPE_YL69]);
 	}
 
 	event void Temp.readDone(error_t err, uint16_t val) {
@@ -315,7 +324,6 @@ implementation {
 			sm.sensor_value = val;
 			ctp_send_sensor_msg(&sm);
 		}
-		call SensorTimer.startOneShot(gl.sensor_period[TYPE_TEMP]);
 	}
 
 	event void Light.readDone(error_t err, uint16_t val) {
@@ -339,7 +347,6 @@ implementation {
 			sm.sensor_value = val;
 			ctp_send_sensor_msg(&sm);
 		}
-		call SensorTimer.startOneShot(gl.sensor_period[TYPE_LIGHT]);
 	}
 #ifdef USING_MIC
 	event void Microphone.readDone(error_t err, uint16_t val) {
@@ -389,7 +396,6 @@ implementation {
 				gl.sensor_period[TYPE_MIC] = SVSWITCH_DELAY_TIME;
 			}
 		}
-		call SensorTimer.startOneShot(gl.sensor_period[TYPE_MIC]);
 	}
 #endif		
 

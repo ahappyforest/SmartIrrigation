@@ -1,5 +1,11 @@
 #include "Sensor.h"
 
+#ifdef USING_SERIAL_PRINTF
+#define NEW_PRINTF_SEMANTICS
+#include "printf.h"
+#endif
+
+
 configuration SensorAppC {
 }
 implementation {
@@ -66,9 +72,17 @@ implementation {
 #endif
 
 	// 远程烧写
-	components DelugeC;
+	//components DelugeC;
 
+#ifdef USING_REMOTE_PRINTF
 	// 远程PrintfC
-	components PrintfC;
-	App.PrintfControl -> PrintfC;
+	components IrPrintfC;
+	App.PrintfControl -> IrPrintfC;
+#endif
+
+#ifdef USING_SERIAL_PRINTF
+
+	components PrintfC, SerialStartC;
+#endif
+
 }
