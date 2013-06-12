@@ -73,6 +73,9 @@ typedef struct global_data {
 	uint16_t mic_reading_count;
 	uint16_t mic_avr;
 	uint16_t mic_lasttime;
+	uint16_t mic_overview[7];
+	bool     mic_calibflag;
+	uint16_t mic_calib;
 #endif
 } global_data_t;
 

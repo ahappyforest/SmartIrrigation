@@ -44,7 +44,27 @@ module SensorC {
 }
 implementation {
 	global_data_t gl;
-	
+
+	/*************************************************
+	 * 各种函数声明
+	 ************************************************/
+	void init();
+	void report_radio_working();
+        void report_sensor_working();
+        void report_error();
+        void report_fatal_error();
+	void ctp_send_sensor_msg(sensor_msg_t *sensor);
+	void ctp_send_reply_msg(reply_msg_t *reply);
+	void check_sv(uint8_t flag);
+	void process_request_sv(const request_msg_t *req);
+	void process_request_sensor(const request_msg_t *req, uint8_t type);
+#ifdef USING_MIC
+	uint16_t power();
+	uint16_t complexity(int16_t local_power);
+	uint16_t maxPower();
+	uint8_t getPhoneme();
+#endif
+
 	void init() {
 		gl.radio_busy = FALSE;
 		memset(&gl.sensor_buf, 0, sizeof(message_t));
@@ -76,6 +96,9 @@ implementation {
 		gl.mic_reading_count = 0;
 		gl.mic_avr = 0;
 		gl.mic_lasttime = 0;
+		memset(gl.mic_overview, 0, sizeof(gl.mic_overview));
+		gl.mic_calibflag = FALSE;
+		gl.mic_calib = 0;
 #endif
 			
 	}
@@ -109,7 +132,7 @@ implementation {
 	//				  START_READING_LIGHT   |
 	//				  START_READING_TEMP;
 	//				  START_READING_DS18B20; 
-			gl.sensor_flag |= START_READING_LIGHT | START_READING_TEMP;
+	//		gl.sensor_flag |= START_READING_LIGHT | START_READING_TEMP;
 
 			// 初始时间， 保证每一个传感器都有自己的时间节点
 			// 在每个时间节点做自己的事情
@@ -350,7 +373,8 @@ implementation {
 	}
 #ifdef USING_MIC
 	event void Microphone.readDone(error_t err, uint16_t val) {
-		uint16_t i;
+		//uint16_t i;
+		uint8_t sample_result;
 	
 		if (err != SUCCESS) {
 			val = 0xFFFF;
@@ -359,42 +383,54 @@ implementation {
 		
 		// 滤波, 由于麦克风设备的采集曲线是围绕着一条线上下震动的， 因此为了方便
 		// 取平均值， 我们将500以下部分取值变为500
-		if (val < 500) val = 500;
+		// if (val < 500) val = 500;
 
 		report_sensor_working();
 		gl.mic_lasttime = call SensorTimer.getNow();
 		gl.sensor_flag |= START_READING_MICROPHONE;
-		
-		// 确保采集正常的采集频率
 		gl.sensor_period[TYPE_MIC] = DEFAULT_MIC_PERIOD;
 		
+		
 		if (gl.mic_reading_count < NREADINGS) {
-			
 			gl.mic_reading[gl.mic_reading_count++] = val;
 
+			// 对Mic进行校正
+			if (!gl.mic_calibflag) {	
+				if (gl.mic_reading_count == 4) {
+					gl.mic_calibflag = TRUE;
+					gl.mic_calib =  gl.mic_reading[0] +
+						        gl.mic_reading[1] +
+							gl.mic_reading[2] +
+							gl.mic_reading[3];
+					gl.mic_calib /= 4;	
+				}
+			}
 		} else {
 			gl.mic_reading_count = 0;
 			// gl.mic_reading_count >= NREADINGS
-			for (i = 0; i < NREADINGS; i++) {
-				gl.mic_avr += gl.mic_reading[i];
-			}
+			//for (i = 0; i < NREADINGS; i++) {
+			//	gl.mic_avr += gl.mic_reading[i];
+			//}
 
-			gl.mic_avr /= NREADINGS;				
+			//gl.mic_avr /= NREADINGS;				
 
-			printf("mic avr: %d\n", gl.mic_avr);
+			//printf("mic avr: %d\n", gl.mic_avr);
+		
+			sample_result = getPhoneme();
+			printf("sample_result: %c\n", sample_result);
+			
+			//if (gl.mic_avr > gl.sensor_threshold[TYPE_MIC]) {
+			//	gl.sv_switch |= SV_SWITCH_MICROPHONE;
+			//} else {
+			//	gl.sv_switch &= ~SV_SWITCH_MICROPHONE;
+			//}
 
-			if (gl.mic_avr > gl.sensor_threshold[TYPE_MIC]) {
-				gl.sv_switch |= SV_SWITCH_MICROPHONE;
-			} else {
-				gl.sv_switch &= ~SV_SWITCH_MICROPHONE;
-			}
-
-			check_sv(gl.sv_switch);
+			//check_sv(gl.sv_switch);
       		
       			// 如果水泵是打开的， 那么采集需要等一个延迟时间
-			if (gl.sv_switch) {
-				gl.sensor_period[TYPE_MIC] = SVSWITCH_DELAY_TIME;
-			}
+			//if (gl.sv_switch) {
+			//	gl.sensor_period[TYPE_MIC] = SVSWITCH_DELAY_TIME;
+			//}
 		}
 	}
 #endif		
@@ -496,55 +532,99 @@ implementation {
 			gl.radio_busy = FALSE;
 		}
 	}
-#ifdef USING_USPEECH
+#ifdef USING_MIC
 #define SILENCE 92
 #define F_DECTION_3
-	bool calib_flag = FALSE;
-	
-	void calibrate() {
-		// 取四次Microphone.read的值, 取平均
-	}
-
 	uint16_t power() {
-		unsigned int16_t j = 0;
+		uint16_t j = 0;
 		int8_t i = 0;
 		while(i < 32) {
-			j += abs(arr[i]);
+			j += abs(gl.mic_reading[i]);
 			i++;
 		}
 		return j;
 	}
 
-	uint16_t complexity(int16_t power){
-		unsigned int16_t j = 0;
+	uint16_t complexity(int16_t local_power){
+		int16_t j = 0;
 		int8_t i = 1;
 		while(i < 32) {
-			j += abs(arr[i] - arr[i-1]);
+			j += abs(gl.mic_reading[i] - gl.mic_reading[i-1]);
 			i++;
 		}
-		return (j*100)/power;
+		return (j*100)/local_power;
 	}
 
-	uint16_t void maxPower(){
+	uint16_t maxPower() {
 		uint8_t i =0;
 		uint16_t max = 0;
 		while (i < 32) {
-			if(max < abs(arr[i])) {
-				max = abs(arr[i]);
+			if(max < abs(gl.mic_reading[i])) {
+				max = abs(gl.mic_reading[i]);
 			}
         		i++;
     		}
     		return max;
 	}
 
-	uint16_t snr(uint16_t power) {
-		int16_t i = 0, j = 0;
-		uint16_t mean = power / 32;
-		while(i <32){
-			j += sq(arr[i] - mean);
-			i++;
+	uint8_t getPhoneme(){
+		if(power()>SILENCE){
+			uint8_t coeff = 0;
+			uint8_t f = 0;
+			uint16_t k = complexity(power()); 
+			gl.mic_overview[6] = gl.mic_overview[5];
+			gl.mic_overview[5] = gl.mic_overview[4];
+			gl.mic_overview[4] = gl.mic_overview[3];
+			gl.mic_overview[3] = gl.mic_overview[2];
+			gl.mic_overview[2] = gl.mic_overview[1];
+			gl.mic_overview[1] = gl.mic_overview[0];
+			gl.mic_overview[0] = k;
+			while(f<6){
+				coeff += gl.mic_overview[f];
+				f++;
+			}
+			coeff /= 7;
+#if F_DETECTION > 0
+			micPower = 0.05 * maxPower() + (1 - 0.05) * micPower;
+			if (micPower>37) {
+				return 'f';
+			}
+#endif
+			if(coeff<30 && coeff>20){
+				return 'u';
+			}
+			else {
+				if(coeff<33){
+					return 'e';
+				}
+				else{
+					if(coeff<46){
+						return 'o';
+					}
+					else{
+						if(coeff<60){
+							return 'v';
+						}
+						else{
+							if(coeff<80){
+								return 'h';
+							}
+							else{
+								if(coeff>80){
+									return 's';
+								}
+								else{
+									return 'm';
+								}
+							}
+						}
+					}
+				}
+			}
 		}
-		return sqrt(j / mean) / power;
+		else{
+			return ' ';
+		}
 	}
 #endif
 }
