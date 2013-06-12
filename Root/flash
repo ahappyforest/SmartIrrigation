@@ -1,0 +1,12 @@
+#!/bin/bash
+
+function install {
+	make micaz install.0 mib520,/dev/ttyUSB0
+}
+
+function reinstall {
+	make micaz reinstall.0 mib520,/dev/ttyUSB0
+
+}
+
+$1

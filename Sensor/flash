@@ -1,0 +1,7 @@
+#!/bin/bash
+
+make micaz
+tos-deluge serial@/dev/ttyUSB1:57600 -s
+tos-deluge serial@/dev/ttyUSB1:57600 -i 1 build/micaz/tos_image.xml
+tos-deluge serial@/dev/ttyUSB1:57600 -dr 1
+
