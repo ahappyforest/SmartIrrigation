@@ -132,7 +132,7 @@ implementation {
 	//				  START_READING_LIGHT   |
 	//				  START_READING_TEMP;
 	//				  START_READING_DS18B20; 
-	//		gl.sensor_flag |= START_READING_LIGHT | START_READING_TEMP;
+			gl.sensor_flag |= START_READING_LIGHT | START_READING_TEMP | START_READING_YL69;
 
 			// 初始时间， 保证每一个传感器都有自己的时间节点
 			// 在每个时间节点做自己的事情
@@ -144,7 +144,7 @@ implementation {
 #ifdef USING_MIC
 			gl.mic_lasttime = call SensorTimer.getNow();
 #endif
-			call SensorTimer.startPeriodic(100);
+			call SensorTimer.startPeriodic(1);
 		} else {
 			report_error();
 		}
@@ -166,8 +166,8 @@ implementation {
 
 	event void SensorTimer.fired() {
 		uint16_t local_time = call SensorTimer.getNow();
-		report_sensor_working();
-		printf("sensor timer fired\n");
+//		report_sensor_working();
+//		printf("sensor timer fired\n");
 		if (gl.sensor_flag & START_READING_DS18B20) {
 			if (local_time - gl.ds18b20_lasttime < gl.sensor_period[TYPE_DS18B20]) { return; }
 			call DS18B20Switch.open();
