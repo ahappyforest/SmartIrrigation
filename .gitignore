@@ -8,5 +8,6 @@ Root/build/
 Sensor/build/
 test/build/
 Sensor/lib/build/
-
+.*.swp
+Mirror/build/
 
