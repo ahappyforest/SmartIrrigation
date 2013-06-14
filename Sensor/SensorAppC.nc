@@ -5,17 +5,55 @@
 #include "printf.h"
 #endif
 
+#define SOLENOIDVALVES_ARBITER_RESOURCE "SV.Arbiter.Resource"
 
 configuration SensorAppC {
 }
 implementation {
 	components MainC, SensorC as App;
 	components LedsC;
-	components new TimerMilliC() as SensorTimer;
+	components new TimerMilliC() as DS18B20Timer;
+	components new TimerMilliC() as HumiTimer;
+	components new TimerMilliC() as TempTimer;
+	components new TimerMilliC() as LightTimer;
+	components new TimerMilliC() as MicTimer;
+
+	components new TimerMilliC() as DS18B20ResourceTimer;
+	components new TimerMilliC() as HumiResourceTimer;
+	components new TimerMilliC() as TempResourceTimer;
+	components new TimerMilliC() as LightResourceTimer;
+	components new TimerMilliC() as MicResourceTimer;
 
 	App.Boot -> MainC;
 	App.Leds -> LedsC;
-	App.SensorTimer -> SensorTimer;
+
+	App.DS18B20Timer -> DS18B20Timer;
+	App.HumiTimer -> HumiTimer;
+	App.TempTimer -> TempTimer;
+	App.LightTimer -> LightTimer;
+	App.MicTimer -> MicTimer;
+
+enum {
+	DS18B20_RESOURCE_CLIENT_ID = unique(SOLENOIDVALVES_ARBITER_RESOURCE),
+	HUMI_RESOURCE_CLIENT_ID = unique(SOLENOIDVALVES_ARBITER_RESOURCE),
+	TEMP_RESOURCE_CLIENT_ID = unique(SOLENOIDVALVES_ARBITER_RESOURCE),
+	LIGHT_RESOURCE_CLIENT_ID = unique(SOLENOIDVALVES_ARBITER_RESOURCE),
+	MIC_RESOURCE_CLIENT_ID = unique(SOLENOIDVALVES_ARBITER_RESOURCE),
+};
+	components new FcfsArbiterC(SOLENOIDVALVES_ARBITER_RESOURCE) as SVResource;
+
+	App.DS18B20ResourceClient -> SVResource.Resource[DS18B20_RESOURCE_CLIENT_ID];
+	App.HumiResourceClient -> SVResource.Resource[HUMI_RESOURCE_CLIENT_ID];
+	App.TempResourceClient -> SVResource.Resource[TEMP_RESOURCE_CLIENT_ID];
+	App.LightResourceClient -> SVResource.Resource[LIGHT_RESOURCE_CLIENT_ID];
+	App.MicResourceClient -> SVResource.Resource[MIC_RESOURCE_CLIENT_ID];
+	App.SVDefaultOwner -> SVResource.ResourceDefaultOwner;
+
+	App.DS18B20ResourceTimer -> DS18B20ResourceTimer;
+	App.HumiResourceTimer -> HumiResourceTimer;
+	App.TempResourceTimer -> TempResourceTimer;
+	App.LightResourceTimer -> LightResourceTimer;
+	App.MicResourceTimer -> MicResourceTimer;
 	
 	// **********************************************************
 	// ctp protocol wiring
@@ -65,11 +103,9 @@ implementation {
 	
 	components SolenoidValvesC as SV;
 	App.SVSwitch -> SV;
-#ifdef USING_MIC
 	components IrMicC;
 	App.Microphone -> IrMicC;
 	App.MicControl -> IrMicC;
-#endif
 
 	// 远程烧写
 	//components DelugeC;
@@ -81,8 +117,6 @@ implementation {
 #endif
 
 #ifdef USING_SERIAL_PRINTF
-
 	components PrintfC, SerialStartC;
 #endif
-
 }

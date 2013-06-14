@@ -15,8 +15,28 @@ module SensorC {
 	uses {
 		interface Boot;
 		interface Leds;
-		interface Timer<TMilli> as SensorTimer;
+
+		interface Timer<TMilli> as DS18B20Timer;
+		interface Timer<TMilli> as HumiTimer;
+		interface Timer<TMilli> as TempTimer;
+		interface Timer<TMilli> as LightTimer;
+		interface Timer<TMilli> as MicTimer;
+		interface Timer<TMilli> as SendSensorStatusTimer;
 		
+		interface Timer<TMilli> as DS18B20ResourceTimer;
+		interface Timer<TMilli> as HumiResourceTimer;
+		interface Timer<TMilli> as TempResourceTimer;
+		interface Timer<TMilli> as LightResourceTimer;
+		interface Timer<TMilli> as MicResourceTimer;
+
+		interface Resource as DS18B20ResourceClient;
+		interface Resource as HumiResourceClient;
+		interface Resource as TempResourceClient;
+		interface Resource as LightResourceClient;
+		interface Resource as MicResourceClient;
+
+		interface ResourceDefaultOwner as SVDefaultOwner;
+
 		interface Send as SensorSend;
 		interface Send as ReplySend;
 		interface Packet as CtpPacket;
@@ -34,20 +54,20 @@ module SensorC {
 		interface Read<uint16_t> as Humidity;
 		interface Read<uint16_t> as Temp;
 		interface Read<uint16_t> as Light;
-#ifdef USING_MIC
 		interface Read<uint16_t> as Microphone;
 		interface SplitControl as MicControl;
-#endif
 
+#ifdef USING_REMOTE_PRINTF
 		interface StdControl as PrintfControl;
+#endif
 	}
 }
 implementation {
 	global_data_t gl;
 
-	/*************************************************
-	 * 各种函数声明
-	 ************************************************/
+/*************************************************
+ * 各种函数声明
+ ************************************************/
 	void init();
 	void report_radio_working();
         void report_sensor_working();
@@ -55,16 +75,24 @@ implementation {
         void report_fatal_error();
 	void ctp_send_sensor_msg(sensor_msg_t *sensor);
 	void ctp_send_reply_msg(reply_msg_t *reply);
-	void check_sv(uint8_t flag);
 	void process_request_sv(const request_msg_t *req);
 	void process_request_sensor(const request_msg_t *req, uint8_t type);
-#ifdef USING_MIC
+
+/************************************************
+* 声音识别算法相关
+*************************************************/
 	uint16_t power();
 	uint16_t complexity(int16_t local_power);
 	uint16_t maxPower();
 	uint8_t getPhoneme();
+
+#ifndef USING_SERIAL_PRINTF
+void printfflush() { }
 #endif
 
+/************************************************
+* 系统开始
+*************************************************/
 	void init() {
 		gl.radio_busy = FALSE;
 		memset(&gl.sensor_buf, 0, sizeof(message_t));
@@ -79,28 +107,17 @@ implementation {
 		gl.sensor_threshold[TYPE_LIGHT]   = DEFAULT_LIGHT_THRESHOLD;
 		gl.sensor_threshold[TYPE_TEMP]    = DEFAULT_TEMP_THRESHOLD;
 		
-		gl.sensor_flag = 0;	
 		gl.sv_switch = 0;
-		gl.auto_flag = TRUE;
+		gl.sv_default_status = OFF;
 
-		
-		gl.ds18b20_lasttime = 0;
-		gl.yl69_lasttime = 0;
-		gl.temp_lasttime = 0;
-		gl.light_lasttime = 0;
-
-#ifdef USING_MIC
 		gl.sensor_period[TYPE_MIC]    = DEFAULT_MIC_PERIOD;
 		gl.sensor_threshold[TYPE_MIC]    = DEFAULT_MIC_THRESHOLD;
 		memset(gl.mic_reading, 0, sizeof(gl.mic_reading));
 		gl.mic_reading_count = 0;
 		gl.mic_avr = 0;
-		gl.mic_lasttime = 0;
 		memset(gl.mic_overview, 0, sizeof(gl.mic_overview));
 		gl.mic_calibflag = FALSE;
 		gl.mic_calib = 0;
-#endif
-			
 	}
 
 	void report_radio_working()  { call Leds.led1Toggle(); }
@@ -118,91 +135,34 @@ implementation {
 	}
 
 	event void RadioControl.startDone(error_t err) {
-		uint16_t local_time;
 		if (err == SUCCESS) {
 			call CtpControl.start();
 			call DripControl.start();
+			call MicControl.start();
 #ifdef USING_REMOTE_PRINTF
 			call PrintfControl.start();
 #endif
-#ifdef USING_MIC
-			call MicControl.start();
-#endif
-	//		gl.sensor_flag |= START_READING_YL69    |
-	//				  START_READING_LIGHT   |
-	//				  START_READING_TEMP;
-	//				  START_READING_DS18B20; 
-			gl.sensor_flag |= START_READING_LIGHT | START_READING_TEMP | START_READING_YL69;
 
-			// 初始时间， 保证每一个传感器都有自己的时间节点
-			// 在每个时间节点做自己的事情
-			local_time = call SensorTimer.getNow();
-			gl.ds18b20_lasttime =  local_time;
-			gl.yl69_lasttime = local_time;
-			gl.temp_lasttime = local_time;
-			gl.light_lasttime = local_time;
-#ifdef USING_MIC
-			gl.mic_lasttime = call SensorTimer.getNow();
-#endif
-			call SensorTimer.startPeriodic(1);
+//			call DS18B20Timer.startOneShot(0);
+			call HumiTimer.startOneShot(0);
+			call TempTimer.startOneShot(0);
+			call LightTimer.startOneShot(0);
 		} else {
 			report_error();
 		}
 	}
 
-#ifdef USING_MIC
 	event void MicControl.startDone(error_t err) {
 		if (err == SUCCESS) {
-			gl.sensor_flag |= START_READING_MICROPHONE;
+			//call MicTimer.startOneShot(0);
 		} else {
 			report_error();
 		}
 	}
 	
 	event void MicControl.stopDone(error_t err) { }
-#endif
 
 	event void RadioControl.stopDone(error_t err) { }
-
-	event void SensorTimer.fired() {
-		uint16_t local_time = call SensorTimer.getNow();
-//		report_sensor_working();
-//		printf("sensor timer fired\n");
-		if (gl.sensor_flag & START_READING_DS18B20) {
-			if (local_time - gl.ds18b20_lasttime < gl.sensor_period[TYPE_DS18B20]) { return; }
-			call DS18B20Switch.open();
-			call DS18B20R.read();
-			gl.sensor_flag &= ~START_READING_DS18B20;
-		} 
-
-		if (gl.sensor_flag & START_READING_YL69) {
-			if (local_time - gl.yl69_lasttime < gl.sensor_period[TYPE_YL69]) { return; }
-			call HumiditySwitch.open();
-			call Humidity.read();
-			gl.sensor_flag &= ~START_READING_YL69;
-		}
-
-		if (gl.sensor_flag & START_READING_TEMP) {
-			if (local_time - gl.temp_lasttime < gl.sensor_period[TYPE_TEMP]) { return; }
-			call Temp.read();
-			gl.sensor_flag &= ~START_READING_TEMP;
-		}
-
-		if (gl.sensor_flag & START_READING_LIGHT) {
-			if (local_time - gl.light_lasttime < gl.sensor_period[TYPE_LIGHT]) { return; }
-			call Light.read();
-			gl.sensor_flag &= ~START_READING_LIGHT;
-		}
-
-#ifdef USING_MIC
-		if (gl.sensor_flag & START_READING_MICROPHONE) {
-			if (local_time - gl.mic_lasttime < gl.sensor_period[TYPE_MIC]) { return; }
-			call Microphone.read();
-			gl.sensor_flag &= ~START_READING_MICROPHONE;
-		}
-#endif
-	}
-	
 
 	void ctp_send_sensor_msg(sensor_msg_t *sensor) {
 		if (!gl.radio_busy) {
@@ -243,22 +203,10 @@ implementation {
 				report_radio_working();
 				gl.radio_busy = TRUE;
 			}
-		}
-	}
-
-	void check_sv(uint8_t flag) {
-		if (gl.auto_flag == TRUE) {
-			if (flag) {
-				call SVSwitch.open();
-			} else {
-				call SVSwitch.close();
-			}
 		} else {
-			if (flag & SV_SWITCH_USERCONTROL) {
-				call SVSwitch.open();
-			} else {
-				call SVSwitch.close();
-			}
+			//printf("Radio busy in function ctp_send_reply_msg\n");
+			//printfflush();
+			;
 		}
 	}
 
@@ -268,21 +216,16 @@ implementation {
 	//	uint16_t digit, decimal;
 	//	memcpy(ch, &val, sizeof(int32_t));
 		memset(&sm, 0, sizeof(sensor_msg_t));
+		report_sensor_working();
 
 		if (err == SUCCESS) {
 			call DS18B20Switch.close();
 
-			gl.ds18b20_lasttime = call SensorTimer.getNow();
-			gl.sensor_flag |= START_READING_DS18B20;
+			// 如果大于某一个阈值， 就会请求打开阀门
 			if (val > gl.sensor_threshold[TYPE_DS18B20]) {
-				gl.sv_switch |= SV_SWITCH_DS18B20;
-			} else {
-				gl.sv_switch &= ~SV_SWITCH_DS18B20;
+				call DS18B20ResourceClient.request();
 			}
 
-			check_sv(gl.sv_switch);
-
-		
 			sm.node_id = TOS_NODE_ID;
 			sm.sensor_type = DS18B20;
 	
@@ -300,80 +243,72 @@ implementation {
 
 			ctp_send_sensor_msg(&sm);
 		}
+
+		call DS18B20Timer.startOneShot(gl.sensor_period[TYPE_DS18B20]);
 	}
 
 	event void Humidity.readDone(error_t err, uint16_t val) {
 		sensor_msg_t sm;
 		memset(&sm, 0, sizeof(sensor_msg_t));
+		report_sensor_working();
 		if (err == SUCCESS) {
 			call HumiditySwitch.close();
-			gl.yl69_lasttime = call SensorTimer.getNow();
-			gl.sensor_flag |= START_READING_YL69;
 			if (val > gl.sensor_threshold[TYPE_YL69]) {
-				gl.sv_switch |= SV_SWITCH_YL69;
-			} else {
-				gl.sv_switch &= ~SV_SWITCH_YL69;
+				call HumiResourceClient.request();
 			}
+			//printf("Humidity: %d\n", val);
+			//printfflush();
 
-			check_sv(gl.sv_switch);
-
-		
 			sm.node_id = TOS_NODE_ID;
 			sm.sensor_type = YL69;
 	
 			sm.sensor_value = val;
 			ctp_send_sensor_msg(&sm);
 		}
+		call HumiTimer.startOneShot(gl.sensor_period[TYPE_YL69]);
 	}
 
 	event void Temp.readDone(error_t err, uint16_t val) {
 		sensor_msg_t sm;
 		memset(&sm, 0, sizeof(sensor_msg_t));
+		report_sensor_working();
 		if (err == SUCCESS) {
-			gl.temp_lasttime = call SensorTimer.getNow();
-			gl.sensor_flag |= START_READING_TEMP;
 			if (val > gl.sensor_threshold[TYPE_TEMP]) {
-				gl.sv_switch |= SV_SWITCH_TEMP;
-			} else {
-				gl.sv_switch &= ~SV_SWITCH_TEMP;
+				call TempResourceClient.request();
 			}
-
-			check_sv(gl.sv_switch);
-
 		
+			//printf("Temp: %d\n", val);
+			//printfflush();
 			sm.node_id = TOS_NODE_ID;
 			sm.sensor_type = THERMISTOR;
 	
 			sm.sensor_value = val;
 			ctp_send_sensor_msg(&sm);
 		}
+		call TempTimer.startOneShot(gl.sensor_period[TYPE_TEMP]);
 	}
 
 	event void Light.readDone(error_t err, uint16_t val) {
 		sensor_msg_t sm;
 		memset(&sm, 0, sizeof(sensor_msg_t));
+		report_sensor_working();
 		if (err == SUCCESS) {
-			gl.sensor_flag |= START_READING_LIGHT;
-			gl.light_lasttime = call SensorTimer.getNow();
 			if (val > gl.sensor_threshold[TYPE_LIGHT]) {
-				gl.sv_switch |= SV_SWITCH_LIGHT;
-			} else {
-				gl.sv_switch &= ~SV_SWITCH_LIGHT;
+				call LightResourceClient.request();
 			}
 
-			check_sv(gl.sv_switch);
-
-		
+			//printf("Light: %d\n", val);
+			//printfflush();
 			sm.node_id = TOS_NODE_ID;
 			sm.sensor_type = LIGHT;
 	
 			sm.sensor_value = val;
 			ctp_send_sensor_msg(&sm);
 		}
+		call LightTimer.startOneShot(gl.sensor_period[TYPE_LIGHT]);
 	}
-#ifdef USING_MIC
+
 	event void Microphone.readDone(error_t err, uint16_t val) {
-		//uint16_t i;
 		uint8_t sample_result;
 	
 		if (err != SUCCESS) {
@@ -381,20 +316,12 @@ implementation {
 			report_error();
 		}
 		
-		// 滤波, 由于麦克风设备的采集曲线是围绕着一条线上下震动的， 因此为了方便
-		// 取平均值， 我们将500以下部分取值变为500
-		// if (val < 500) val = 500;
-
 		report_sensor_working();
-		gl.mic_lasttime = call SensorTimer.getNow();
-		gl.sensor_flag |= START_READING_MICROPHONE;
-		gl.sensor_period[TYPE_MIC] = DEFAULT_MIC_PERIOD;
-		
 		
 		if (gl.mic_reading_count < NREADINGS) {
 			gl.mic_reading[gl.mic_reading_count++] = val;
 
-			// 对Mic进行校正
+			// 如果没有对Mic进行校正， 先校正
 			if (!gl.mic_calibflag) {	
 				if (gl.mic_reading_count == 4) {
 					gl.mic_calibflag = TRUE;
@@ -406,34 +333,17 @@ implementation {
 				}
 			}
 		} else {
+			// 开始进行声音识别
 			gl.mic_reading_count = 0;
-			// gl.mic_reading_count >= NREADINGS
-			//for (i = 0; i < NREADINGS; i++) {
-			//	gl.mic_avr += gl.mic_reading[i];
-			//}
 
-			//gl.mic_avr /= NREADINGS;				
-
-			//printf("mic avr: %d\n", gl.mic_avr);
-		
 			sample_result = getPhoneme();
-			printf("sample_result: %c\n", sample_result);
-			
-			//if (gl.mic_avr > gl.sensor_threshold[TYPE_MIC]) {
-			//	gl.sv_switch |= SV_SWITCH_MICROPHONE;
-			//} else {
-			//	gl.sv_switch &= ~SV_SWITCH_MICROPHONE;
-			//}
+			//printf("sample_result: %c\n", sample_result);
+			//printfflush();
 
-			//check_sv(gl.sv_switch);
-      		
-      			// 如果水泵是打开的， 那么采集需要等一个延迟时间
-			//if (gl.sv_switch) {
-			//	gl.sensor_period[TYPE_MIC] = SVSWITCH_DELAY_TIME;
-			//}
+			// 发包
 		}
+		call MicTimer.startOneShot(gl.sensor_period[TYPE_MIC]);
 	}
-#endif		
 
 	void process_request_sv(const request_msg_t *req) {
 		reply_msg_t reply;
@@ -444,13 +354,14 @@ implementation {
 		switch(req->request_code) {
 			case SET_SWITCH_STATUS_REQUEST:
 				if (req->request_data == ON) {
-					gl.sv_switch |= SV_SWITCH_USERCONTROL;
-					gl.auto_flag = FALSE;
+					gl.sv_default_status = ON;
+					//printf("request data: ON\n");
+					//printfflush();
 				} else if (req->request_data == OFF) {
-					gl.sv_switch &= ~SV_SWITCH_USERCONTROL;
-					gl.auto_flag = FALSE;
-				} else if (req->request_data == AUTO) {
-					gl.auto_flag = TRUE;
+					gl.sv_default_status = OFF;
+					//printf("request data: OFF\n");
+					//printfflush();
+				} else {
 					return;
 				}
 				reply.status = SUCCESS;
@@ -463,8 +374,10 @@ implementation {
 			case SET_READING_THRESHOLD_REQUEST:
 			case GET_READING_THRESHOLD_REQUEST:
 				return;
+			default:
+				return;
 		}
-
+		signal SVDefaultOwner.granted();
 		ctp_send_reply_msg(&reply);
 	}
 
@@ -491,7 +404,10 @@ implementation {
 			case GET_READING_THRESHOLD_REQUEST:
 				reply.status = gl.sensor_threshold[type];
 				break;
+			default: 
+				return;
 		}
+
 		ctp_send_reply_msg(&reply);
 	}
 
@@ -517,7 +433,10 @@ implementation {
 			case DS18B20:
 				process_request_sensor(req, device_to_type[req->request_device]);
 				break;
+			default: return;
 		}
+		//printf("received a command\n");
+		//printfflush();
 	}
 
 	event void SensorSend.sendDone(message_t *msg, error_t err) {
@@ -532,7 +451,119 @@ implementation {
 			gl.radio_busy = FALSE;
 		}
 	}
-#ifdef USING_MIC
+
+
+	event void DS18B20Timer.fired() {
+		call DS18B20Switch.open();
+		call DS18B20R.read();
+	}
+
+
+	event void HumiTimer.fired() {
+		call HumiditySwitch.open();
+		call Humidity.read();
+	}
+
+	event void TempTimer.fired() {
+		call Temp.read();
+	}
+
+	event void LightTimer.fired() {
+		call Light.read();	
+	}
+
+	event void MicTimer.fired() {
+		call Microphone.read();
+	}
+
+	// 如果多个传感器需要操作电磁阀门， 这里我们使用arbiter进行仲裁
+	event void DS18B20ResourceTimer.fired() {
+		call DS18B20ResourceClient.release();
+	}
+
+	event void HumiResourceTimer.fired() {
+		call HumiResourceClient.release();
+	}
+
+	event void TempResourceTimer.fired() {
+		call TempResourceClient.release();
+	}
+
+	event void LightResourceTimer.fired() {
+		call LightResourceClient.release();
+	}
+
+	event void MicResourceTimer.fired() {
+		call MicResourceClient.release();
+	}
+
+	task void openSVSwitch() {
+		//printf("task open Switch\n");
+		call SVSwitch.open();
+	}
+
+	task void closeSVSwitch() {
+		//printf("task close Switch\n");
+		call SVSwitch.close();
+	}
+
+	event void DS18B20ResourceClient.granted() {
+		// 打开电磁阀门
+		post openSVSwitch();
+		call DS18B20ResourceTimer.startOneShot(SV_HOLD_PERIOD);
+	}
+
+	event void HumiResourceClient.granted() {
+		// 打开电磁阀门
+		post openSVSwitch();
+		call HumiResourceTimer.startOneShot(SV_HOLD_PERIOD);
+	}
+
+	event void TempResourceClient.granted() {
+		// 打开电磁阀门
+		post openSVSwitch();
+		call TempResourceTimer.startOneShot(SV_HOLD_PERIOD);
+	}
+
+	event void LightResourceClient.granted() {
+		// 打开电磁阀门
+		post openSVSwitch();
+		call LightResourceTimer.startOneShot(SV_HOLD_PERIOD);
+	}
+
+	event void MicResourceClient.granted() {
+		// 打开电磁阀门
+		post openSVSwitch();
+		call MicResourceTimer.startOneShot(SV_HOLD_PERIOD);
+	}
+
+	task void check_sv() {
+		uint8_t local_val = gl.sv_default_status;
+		if (local_val == OFF) {
+			printfflush();
+			call SVSwitch.close();
+		//	printf("Now, close the switch, switch status: %d\n\n\n", call SVSwitch.getStatus());
+		} else {
+			printfflush();
+			call SVSwitch.open();
+		//	printf("Now, open the switch, switch status: %d\n\n\n", call SVSwitch.getStatus());
+		}
+	}
+
+	async event void SVDefaultOwner.granted() {
+//		printf("SVDefaultOwner granted\n");
+//		printfflush();
+		post check_sv();
+	}
+
+	async event void SVDefaultOwner.requested() {
+		call SVDefaultOwner.release();
+	}
+
+	async event void SVDefaultOwner.immediateRequested() {
+	  	call SVDefaultOwner.release();
+	}
+
 #define SILENCE 92
 #define F_DECTION_3
 	uint16_t power() {
@@ -626,5 +657,4 @@ implementation {
 			return ' ';
 		}
 	}
-#endif
 }
