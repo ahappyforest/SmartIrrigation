@@ -108,7 +108,7 @@ enum {
 	App.MicControl -> IrMicC;
 
 	// 远程烧写
-	//components DelugeC;
+	components DelugeC;
 
 #ifdef USING_REMOTE_PRINTF
 	// 远程PrintfC
