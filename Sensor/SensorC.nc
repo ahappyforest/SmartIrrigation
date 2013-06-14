@@ -263,6 +263,7 @@ void printfflush() { }
 	
 			sm.sensor_value = val;
 			ctp_send_sensor_msg(&sm);
+			printf("send sensor msg in Humi, now sensor period = %d\n", gl.sensor_period[TYPE_YL69]);	
 		}
 		call HumiTimer.startOneShot(gl.sensor_period[TYPE_YL69]);
 	}
@@ -282,6 +283,7 @@ void printfflush() { }
 			sm.sensor_type = THERMISTOR;
 	
 			sm.sensor_value = val;
+			printf("send sensor msg in Temp, now period = %d\n", gl.sensor_period[TYPE_TEMP]);	
 			ctp_send_sensor_msg(&sm);
 		}
 		call TempTimer.startOneShot(gl.sensor_period[TYPE_TEMP]);
@@ -302,6 +304,7 @@ void printfflush() { }
 			sm.sensor_type = LIGHT;
 	
 			sm.sensor_value = val;
+			printf("send sensor msg in Light, now period = %d\n", gl.sensor_period[TYPE_LIGHT]);	
 			ctp_send_sensor_msg(&sm);
 		}
 		call LightTimer.startOneShot(gl.sensor_period[TYPE_LIGHT]);
@@ -349,6 +352,9 @@ void printfflush() { }
 		memset(&reply, 0, sizeof(reply_msg_t));
 		reply.node_id = TOS_NODE_ID;
 		reply.transaction_number = req->transaction_number;
+		reply.request_code = req->request_code;
+		reply.request_device = req->request_device;
+		reply.request_data = req->request_data;
 
 		switch(req->request_code) {
 			case SET_SWITCH_STATUS_REQUEST:
@@ -366,7 +372,7 @@ void printfflush() { }
 				reply.status = SUCCESS;
 				break;
 			case GET_SWITCH_STATUS_REQUEST:
-				reply.status = call SVSwitch.getStatus();		
+				reply.status = SUCCESS;
 			case GET_READING_REQUEST:
 			case SET_READING_PERIOD_REQUEST:
 			case GET_READING_PERIOD_REQUEST:
@@ -385,6 +391,9 @@ void printfflush() { }
 		memset(&reply, 0, sizeof(reply_msg_t));
 		reply.node_id = TOS_NODE_ID;
 		reply.transaction_number = req->transaction_number;
+		reply.request_code = req->request_code;
+		reply.request_device = req->request_device;
+		reply.request_data = req->request_data;
 
 		switch(req->request_code) {
 			case SET_SWITCH_STATUS_REQUEST:
@@ -396,12 +405,16 @@ void printfflush() { }
 				reply.status = SUCCESS;
 				break;
 			case GET_READING_PERIOD_REQUEST:
-				reply.status = gl.sensor_period[type];
+				reply.request_data = gl.sensor_period[type];
+				reply.status = SUCCESS;
+				break;
 			case SET_READING_THRESHOLD_REQUEST:
 				gl.sensor_threshold[type] = req->request_data;
 				reply.status = SUCCESS;
+				break;
 			case GET_READING_THRESHOLD_REQUEST:
-				reply.status = gl.sensor_threshold[type];
+				reply.request_data = gl.sensor_threshold[type];
+				reply.status = SUCCESS;
 				break;
 			default: 
 				return;
