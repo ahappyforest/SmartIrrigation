@@ -50,6 +50,12 @@ typedef struct request_msg {
 typedef struct reply_msg {
 	nx_uint16_t node_id;
 	nx_uint16_t transaction_number;
+
+	// copy from request_msg
+	nx_uint16_t request_code;
+	nx_uint16_t request_device;
+	nx_uint16_t request_data;
+
 	nx_uint8_t status;
 	nx_uint16_t remark; // 备注, 出现错误， 给出更具体的提示, 备用
 	nx_uint16_t reserved[RESERVED_LEN];
