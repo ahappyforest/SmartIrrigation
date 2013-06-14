@@ -21,7 +21,6 @@ module SensorC {
 		interface Timer<TMilli> as TempTimer;
 		interface Timer<TMilli> as LightTimer;
 		interface Timer<TMilli> as MicTimer;
-		interface Timer<TMilli> as SendSensorStatusTimer;
 		
 		interface Timer<TMilli> as DS18B20ResourceTimer;
 		interface Timer<TMilli> as HumiResourceTimer;
