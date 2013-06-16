@@ -47,4 +47,12 @@ implementation {
 	App.ReqUpdate -> DisseminatorC;
 	
 	components DelugeC;
+
+#define IR_QUEUESIZE 50
+	components new BigQueueC(msg_data_t, IR_QUEUESIZE) as MsgQueue;
+	components new TimerMilliC() as MsgCheckTimer;
+	
+	App.MsgQueue -> MsgQueue;
+	App.MsgCheckTimer -> MsgCheckTimer;
+
 }

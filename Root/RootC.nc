@@ -17,13 +17,31 @@ module RootC {
 
 		interface StdControl as DripControl;
 		interface DisseminationUpdate<request_msg_t> as ReqUpdate;
+	
+		interface BigQueue<msg_data_t> as MsgQueue;
+		interface Timer<TMilli> as MsgCheckTimer;
 	}
 }
 implementation {
 	global_data_t gl;
 
+
+	void init(void);
+	void report_radio_working();
+	void report_serial_working();
+	void report_error();
+	void report_fatal_error();
+	void serial_send_sensor_msg(sensor_msg_t *sensor);
+	void serial_send_reply_msg(reply_msg_t *reply);
+	void process_request(request_msg_t *req);
+	msg_data_t msg_queue_data_from_sensor(sensor_msg_t *sm);
+	msg_data_t msg_queue_data_from_reply(reply_msg_t *rm);
+	error_t process_msg_queue_data(msg_data_t *_m);
+
 	void init(void) {
 		gl.serial_busy = FALSE;
+		memset(&gl.serial_buf, 0, sizeof(message_t));
+		gl.msg_queue_retry_interval = 10;
 	}
 
 	void report_radio_working()  { call Leds.led1Toggle(); }
@@ -106,23 +124,42 @@ implementation {
 			call CtpControl.start();
 			call DripControl.start();
 			call RootControl.setRoot();
+			call MsgCheckTimer.startOneShot(0);
 		} else {
 			report_fatal_error();
 		}
 	}
 
 	event message_t *CtpSensorReceive.receive(message_t *msg, void *payload, uint8_t len) {
+		report_radio_working();
 		if (len == sizeof(sensor_msg_t)) {
-			serial_send_sensor_msg((sensor_msg_t *)payload);
-			report_radio_working();
+			call MsgQueue.enqueue(msg_queue_data_from_sensor((sensor_msg_t *)payload));
 		}
 		return msg;
 	}
 
+	msg_data_t msg_queue_data_from_sensor(sensor_msg_t *sm) {
+		msg_data_t md;
+		md.msg_type = AM_SENSOR_MSG;
+		md.m_data.m_sensor = *sm;
+
+		return md;
+
+	}
+
+	msg_data_t msg_queue_data_from_reply(reply_msg_t *rm) {
+		msg_data_t md;
+		md.msg_type = AM_REPLY_MSG;
+		md.m_data.m_reply = *rm;
+
+		return md;
+	}
+
+
 	event message_t *CtpReplyReceive.receive(message_t *msg, void *payload, uint8_t len) {
+		report_radio_working();
 		if (len == sizeof(reply_msg_t)) {
-			serial_send_reply_msg((reply_msg_t *)payload);
-			report_radio_working();
+			call MsgQueue.enqueue(msg_queue_data_from_reply((reply_msg_t *)payload));
 		}
 		return msg;
 	}
@@ -131,6 +168,7 @@ implementation {
 		if (msg == &gl.serial_buf) {
 			gl.serial_busy = FALSE;
 			report_serial_working();
+			call MsgCheckTimer.startOneShot(0);
 		}
 	}
 
@@ -138,6 +176,7 @@ implementation {
 		if (msg == &gl.serial_buf) {
 			gl.serial_busy = FALSE;
 			report_serial_working();
+			call MsgCheckTimer.startOneShot(0);
 		}
 	}
 
@@ -155,4 +194,32 @@ implementation {
 	}
 
 	event void RadioControl.stopDone(error_t err) { }
+
+	error_t process_msg_queue_data(msg_data_t *_m) {
+		if (_m->msg_type == AM_SENSOR_MSG) {
+			serial_send_sensor_msg(&(_m->m_data.m_sensor));
+		} else if (_m->msg_type == AM_REPLY_MSG) {
+			serial_send_reply_msg(&(_m->m_data.m_reply));
+		} else {
+			return FAIL;
+		}
+		return SUCCESS;
+	}
+
+
+	event void MsgCheckTimer.fired() {
+		msg_data_t m_data;
+		if (!call MsgQueue.empty()) {
+			m_data = call MsgQueue.dequeue();
+			if (process_msg_queue_data(&m_data) != SUCCESS) {
+				call MsgCheckTimer.startOneShot(gl.msg_queue_retry_interval);
+			}
+		} else {
+			// 等待一段事件再次检查
+			call MsgCheckTimer.startOneShot(gl.msg_queue_retry_interval);
+		}
+	}
+	
+	
+	
 }
