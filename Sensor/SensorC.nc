@@ -595,9 +595,9 @@ void printfflush() { }
 
 	error_t process_msg_queue_data(msg_data_t *_m) {
 		if (_m->msg_type == AM_SENSOR_MSG) {
-			ctp_send_sensor_msg(&(_m->m_data.m_sensor));
+			serial_send_sensor_msg(&(_m->m_data.m_sensor));
 		} else if (_m->msg_type == AM_REPLY_MSG) {
-			ctp_send_reply_msg(&(_m->m_data.m_reply));
+			serial_send_reply_msg(&(_m->m_data.m_reply));
 		} else {
 			return FAIL;
 		}
