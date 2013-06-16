@@ -108,7 +108,7 @@ enum {
 	App.MicControl -> IrMicC;
 
 	// 远程烧写
-	components DelugeC;
+	//components DelugeC;
 
 #ifdef USING_REMOTE_PRINTF
 	// 远程PrintfC
@@ -119,4 +119,11 @@ enum {
 #ifdef USING_SERIAL_PRINTF
 	components PrintfC, SerialStartC;
 #endif
+#define IR_QUEUESIZE 50
+
+	components new BigQueueC(msg_data_t, IR_QUEUESIZE);
+	App.MsgQueue -> BigQueueC;
+	
+	components new TimerMilliC() as MsgCheckTimer;
+	App.MsgCheckTimer -> MsgCheckTimer;
 }

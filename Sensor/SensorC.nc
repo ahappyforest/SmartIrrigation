@@ -59,6 +59,9 @@ module SensorC {
 #ifdef USING_REMOTE_PRINTF
 		interface StdControl as PrintfControl;
 #endif
+
+		interface BigQueue<msg_data_t> as MsgQueue;
+		interface Timer<TMilli> as MsgCheckTimer;
 	}
 }
 implementation {
@@ -117,6 +120,9 @@ void printfflush() { }
 		memset(gl.mic_overview, 0, sizeof(gl.mic_overview));
 		gl.mic_calibflag = FALSE;
 		gl.mic_calib = 0;
+
+		// 这个地方应该按照各个传感器的period综合考虑, 现在暂时设置为一个固定值
+		gl.msg_queue_retry_interval = 10;
 	}
 
 	void report_radio_working()  { call Leds.led1Toggle(); }
@@ -127,6 +133,23 @@ void printfflush() { }
                 call Leds.led1On();
                 call Leds.led2On();
         }
+
+	msg_data_t msg_queue_data_from_sensor(sensor_msg_t *sm) {
+		msg_data_t md;
+		md.msg_type = AM_SENSOR_MSG;
+		md.m_data.m_sensor = *sm;
+
+		return md;
+
+	}
+
+	msg_data_t msg_queue_data_from_reply(reply_msg_t *rm) {
+		msg_data_t md;
+		md.msg_type = AM_REPLY_MSG;
+		md.m_data.m_reply = *rm;
+
+		return md;
+	}
 
 	event void Boot.booted() {
 		init();
@@ -146,7 +169,9 @@ void printfflush() { }
 			call HumiTimer.startOneShot(0);
 			call TempTimer.startOneShot(0);
 			call LightTimer.startOneShot(0);
+			call MsgCheckTimer.startOneShot(0);
 		} else {
+			printf("radio Control error\n");
 			report_error();
 		}
 	}
@@ -155,6 +180,7 @@ void printfflush() { }
 		if (err == SUCCESS) {
 	//		call MicTimer.startOneShot(0);
 		} else {
+			printf("MicControl error\n");
 			report_error();
 		}
 	}
@@ -168,6 +194,7 @@ void printfflush() { }
 			sensor_msg_t *new_payload = (sensor_msg_t *)(
 				call SensorSend.getPayload(&gl.sensor_buf, sizeof(sensor_msg_t)));
 			if (new_payload == NULL) { 
+				printf("ctp_send_sensor_msg error\n");
 				report_error();
 				return;
 			}
@@ -182,7 +209,7 @@ void printfflush() { }
 				gl.radio_busy = TRUE;
 			}
 		} else {
-			printf("radio busy\n");
+			printf("node: %d, radio busy in send sensor msg\n", TOS_NODE_ID);
 			printfflush();
 		}
 	}
@@ -192,11 +219,13 @@ void printfflush() { }
 			reply_msg_t *new_payload = (reply_msg_t *)(
 				call ReplySend.getPayload(&gl.reply_buf, sizeof(reply_msg_t)));
 			if (new_payload == NULL) { 
+				printf("ctp_send_reply_msg error\n");
 				report_error();
 				return;
 			}
 			*new_payload = *reply;
 			if (call CtpPacket.maxPayloadLength() < sizeof(reply_msg_t)) {
+				printf("ctp_send_reply_msg error\n");
 				report_error();
 				return;
 			}
@@ -206,6 +235,7 @@ void printfflush() { }
 				gl.radio_busy = TRUE;
 			}
 		} else {
+			printf("node: %d, radio busy in send reply msg\n", TOS_NODE_ID);
 			printfflush();
 		}
 	}
@@ -248,7 +278,8 @@ void printfflush() { }
 	*/	
 			sm.sensor_value = val;
 
-			ctp_send_sensor_msg(&sm);
+	//		ctp_send_sensor_msg(&sm);
+			call MsgQueue.enqueue(msg_queue_data_from_sensor(&sm));
 		}
 
 		call DS18B20Timer.startOneShot(gl.sensor_period[TYPE_DS18B20]);
@@ -274,7 +305,8 @@ void printfflush() { }
 	
 			sm.sensor_value = val;
 			////printf("send sensor msg in humi\n");
-			ctp_send_sensor_msg(&sm);
+			//ctp_send_sensor_msg(&sm);
+			call MsgQueue.enqueue(msg_queue_data_from_sensor(&sm));
 		}
 		call HumiTimer.startOneShot(gl.sensor_period[TYPE_YL69]);
 	}
@@ -297,7 +329,8 @@ void printfflush() { }
 	
 			sm.sensor_value = val;
 			//printf("send sensor msg in temp\n");
-			ctp_send_sensor_msg(&sm);
+			//ctp_send_sensor_msg(&sm);
+			call MsgQueue.enqueue(msg_queue_data_from_sensor(&sm));
 		}
 		call TempTimer.startOneShot(gl.sensor_period[TYPE_TEMP]);
 	}
@@ -321,7 +354,8 @@ void printfflush() { }
 	
 			sm.sensor_value = val;
 			//printf("send sensor msg in light\n");
-			ctp_send_sensor_msg(&sm);
+			//ctp_send_sensor_msg(&sm);
+			call MsgQueue.enqueue(msg_queue_data_from_sensor(&sm));
 		}
 		call LightTimer.startOneShot(gl.sensor_period[TYPE_LIGHT]);
 	}
@@ -335,6 +369,7 @@ void printfflush() { }
 	
 		if (err != SUCCESS) {
 			val = 0xFFFF;
+			printf("microphone readDone error\n");
 			report_error();
 		}
 		
@@ -422,15 +457,15 @@ void printfflush() { }
 			case SET_SWITCH_STATUS_REQUEST:
 				if (req->request_data == ON) {
 					gl.sv_default_status = ON;
-					//printf("request data: ON\n");
+					printf("node: %d, request data: ON\n", TOS_NODE_ID);
 					//printfflush();
 				} else if (req->request_data == OFF) {
 					gl.sv_default_status = OFF;
-					//printf("request data: OFF\n");
+					printf("node: %d, request data: OFF\n", TOS_NODE_ID);
 					//printfflush();
 				} else if (req->request_data == AUTO) {
 					gl.sv_default_status = AUTO;
-					//printf("request data: AUTO\n");
+					printf("node: %d, request data: AUTO\n", TOS_NODE_ID);
 					//printfflush();
 				}
 				reply.status = SUCCESS;
@@ -448,7 +483,8 @@ void printfflush() { }
 		}
 		//printf("signal default granted in request sv\n");
 		signal SVDefaultOwner.granted();
-		ctp_send_reply_msg(&reply);
+		//ctp_send_reply_msg(&reply);
+		call MsgQueue.enqueue(msg_queue_data_from_reply(&reply));
 	}
 
 	void process_request_sensor(const request_msg_t *req, uint8_t type) {
@@ -466,7 +502,7 @@ void printfflush() { }
 			case GET_READING_REQUEST:
 				return;
 			case SET_READING_PERIOD_REQUEST:
-				//printf("set type: %d, period : %d\n", type, req->request_data); 
+				printf("node: %d, set type: %d, period : %d\n", TOS_NODE_ID, type, req->request_data); 
 				gl.sensor_period[type] = req->request_data;
 				reply.status = SUCCESS;
 				break;
@@ -475,7 +511,7 @@ void printfflush() { }
 				reply.status = SUCCESS;
 				break;
 			case SET_READING_THRESHOLD_REQUEST:
-				//printf("set type: %d, threshold : %d\n", type, req->request_data); 
+				printf("node: %d, set type: %d, threshold : %d\n", TOS_NODE_ID, type, req->request_data); 
 				gl.sensor_threshold[type] = req->request_data;
 				reply.status = SUCCESS;
 				break;
@@ -487,7 +523,8 @@ void printfflush() { }
 				return;
 		}
 
-		ctp_send_reply_msg(&reply);
+		//ctp_send_reply_msg(&reply);
+		call MsgQueue.enqueue(msg_queue_data_from_reply(&reply));
 	}
 
 	event void ReqValue.changed() {
@@ -514,20 +551,21 @@ void printfflush() { }
 				break;
 			default: return;
 		}
-		//printf("received a command\n");
+		printf("node: %d, received a command\n", TOS_NODE_ID);
 		//printfflush();
 	}
 
 	event void SensorSend.sendDone(message_t *msg, error_t err) {
 		if (msg == &gl.sensor_buf) {
 			gl.radio_busy = FALSE;
+			call MsgCheckTimer.startOneShot(0);
 		}
-
 	}
 
 	event void ReplySend.sendDone(message_t *msg, error_t err) {
 		if (msg == &gl.reply_buf) {
 			gl.radio_busy = FALSE;
+			call MsgCheckTimer.startOneShot(0);
 		}
 	}
 
@@ -553,6 +591,30 @@ void printfflush() { }
 
 	event void MicTimer.fired() {
 		call Microphone.read();
+	}
+
+	error_t process_msg_queue_data(msg_data_t *_m) {
+		if (_m->msg_type == AM_SENSOR_MSG) {
+			ctp_send_sensor_msg(&(_m->m_data.m_sensor));
+		} else if (_m->msg_type == AM_REPLY_MSG) {
+			ctp_send_reply_msg(&(_m->m_data.m_reply));
+		} else {
+			return FAIL;
+		}
+		return SUCCESS;
+	}
+
+	event void MsgCheckTimer.fired() {
+		msg_data_t m_data;
+		if (!call MsgQueue.empty()) {
+			m_data = call MsgQueue.dequeue();
+			if (process_msg_queue_data(&m_data) != SUCCESS) {
+				call MsgCheckTimer.startOneShot(gl.msg_queue_retry_interval);
+			}
+		} else {
+			// 等待一段事件再次检查
+			call MsgCheckTimer.startOneShot(gl.msg_queue_retry_interval);
+		}
 	}
 
 	// 如果多个传感器需要操作电磁阀门， 这里我们使用arbiter进行仲裁
