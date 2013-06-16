@@ -182,6 +182,7 @@ void printfflush() { }
 				gl.radio_busy = TRUE;
 			}
 		} else {
+			printf("radio busy\n");
 			printfflush();
 		}
 	}
@@ -228,7 +229,7 @@ void printfflush() { }
 			} else {
 				// 否则说明要么阀值低， 不打开， 要么不是auto， 那么我们将这些操作转发到default owner，
 				// 由它来决定, 然后在default owner中判断, 此时是应该打开还是关闭
-				printf("signal default granted in ds18b20 readDone\n");
+				//printf("signal default granted in ds18b20 readDone\n");
 				signal SVDefaultOwner.granted();
 			}
 
@@ -257,13 +258,14 @@ void printfflush() { }
 		sensor_msg_t sm;
 		memset(&sm, 0, sizeof(sensor_msg_t));
 		report_sensor_working();
-		printfflush();
+		//printf("humi val %d\n", val);
+		//printfflush();
 		if (err == SUCCESS) {
 			call HumiditySwitch.close();
 			if (val > gl.sensor_threshold[TYPE_YL69] && gl.sv_default_status == AUTO) {
 				call HumiResourceClient.request();
 			} else {
-				printf("signal default granted in Humi readDone\n");
+				//printf("signal default granted in Humi readDone\n");
 				signal SVDefaultOwner.granted();
 			}
 
@@ -271,6 +273,7 @@ void printfflush() { }
 			sm.sensor_type = YL69;
 	
 			sm.sensor_value = val;
+			////printf("send sensor msg in humi\n");
 			ctp_send_sensor_msg(&sm);
 		}
 		call HumiTimer.startOneShot(gl.sensor_period[TYPE_YL69]);
@@ -280,11 +283,12 @@ void printfflush() { }
 		sensor_msg_t sm;
 		memset(&sm, 0, sizeof(sensor_msg_t));
 		report_sensor_working();
+		//printf("temp val %d\n", val);
 		if (err == SUCCESS) {
 			if (val > gl.sensor_threshold[TYPE_TEMP] && gl.sv_default_status == AUTO) {
 				call TempResourceClient.request();
 			} else {
-				printf("signal default granted in Temp readDone\n");
+				//printf("signal default granted in Temp readDone\n");
 				signal SVDefaultOwner.granted();
 			}
 		
@@ -292,6 +296,7 @@ void printfflush() { }
 			sm.sensor_type = THERMISTOR;
 	
 			sm.sensor_value = val;
+			//printf("send sensor msg in temp\n");
 			ctp_send_sensor_msg(&sm);
 		}
 		call TempTimer.startOneShot(gl.sensor_period[TYPE_TEMP]);
@@ -301,11 +306,12 @@ void printfflush() { }
 		sensor_msg_t sm;
 		memset(&sm, 0, sizeof(sensor_msg_t));
 		report_sensor_working();
+		//printf("light val %d\n", val);
 		if (err == SUCCESS) {
 			if (val < gl.sensor_threshold[TYPE_LIGHT] && gl.sv_default_status == AUTO) {
 				call LightResourceClient.request();
 			} else {
-				printf("signal default granted in Light readDone\n");
+				//printf("signal default granted in Light readDone\n");
 				signal SVDefaultOwner.granted();
 			//	call SVSwitch.close();
 			}
@@ -314,6 +320,7 @@ void printfflush() { }
 			sm.sensor_type = LIGHT;
 	
 			sm.sensor_value = val;
+			//printf("send sensor msg in light\n");
 			ctp_send_sensor_msg(&sm);
 		}
 		call LightTimer.startOneShot(gl.sensor_period[TYPE_LIGHT]);
@@ -390,7 +397,7 @@ void printfflush() { }
 			if (gl.mic_avr > gl.sensor_threshold[TYPE_MIC] && gl.sv_default_status == AUTO) {
 				call MicResourceClient.request();
 			} else {
-				printf("signal default granted in Mic readDone\n");
+				//printf("signal default granted in Mic readDone\n");
 				signal SVDefaultOwner.granted();
 			}
 		
@@ -415,16 +422,16 @@ void printfflush() { }
 			case SET_SWITCH_STATUS_REQUEST:
 				if (req->request_data == ON) {
 					gl.sv_default_status = ON;
-					printf("request data: ON\n");
-					printfflush();
+					//printf("request data: ON\n");
+					//printfflush();
 				} else if (req->request_data == OFF) {
 					gl.sv_default_status = OFF;
-					printf("request data: OFF\n");
-					printfflush();
+					//printf("request data: OFF\n");
+					//printfflush();
 				} else if (req->request_data == AUTO) {
 					gl.sv_default_status = AUTO;
-					printf("request data: AUTO\n");
-					printfflush();
+					//printf("request data: AUTO\n");
+					//printfflush();
 				}
 				reply.status = SUCCESS;
 				break;
@@ -439,7 +446,7 @@ void printfflush() { }
 			default:
 				return;
 		}
-		printf("signal default granted in request sv\n");
+		//printf("signal default granted in request sv\n");
 		signal SVDefaultOwner.granted();
 		ctp_send_reply_msg(&reply);
 	}
@@ -459,7 +466,7 @@ void printfflush() { }
 			case GET_READING_REQUEST:
 				return;
 			case SET_READING_PERIOD_REQUEST:
-				printf("set type: %d, period : %d\n", type, req->request_data); 
+				//printf("set type: %d, period : %d\n", type, req->request_data); 
 				gl.sensor_period[type] = req->request_data;
 				reply.status = SUCCESS;
 				break;
@@ -468,7 +475,7 @@ void printfflush() { }
 				reply.status = SUCCESS;
 				break;
 			case SET_READING_THRESHOLD_REQUEST:
-				printf("set type: %d, threshold : %d\n", type, req->request_data); 
+				//printf("set type: %d, threshold : %d\n", type, req->request_data); 
 				gl.sensor_threshold[type] = req->request_data;
 				reply.status = SUCCESS;
 				break;
@@ -507,8 +514,8 @@ void printfflush() { }
 				break;
 			default: return;
 		}
-		printf("received a command\n");
-		printfflush();
+		//printf("received a command\n");
+		//printfflush();
 	}
 
 	event void SensorSend.sendDone(message_t *msg, error_t err) {
@@ -550,31 +557,31 @@ void printfflush() { }
 
 	// 如果多个传感器需要操作电磁阀门， 这里我们使用arbiter进行仲裁
 	event void DS18B20ResourceTimer.fired() {
-		printf("now close SVSwitch from ds18b20Timer\n");
+		//printf("now close SVSwitch from ds18b20Timer\n");
 		call SVSwitch.close();
 		call DS18B20ResourceClient.release();
 	}
 
 	event void HumiResourceTimer.fired() {
-		printf("now close SVSwitch from humiTimer\n");
+		//printf("now close SVSwitch from humiTimer\n");
 		call SVSwitch.close();
 		call HumiResourceClient.release();
 	}
 
 	event void TempResourceTimer.fired() {
-		printf("now close SVSwitch from tempTimer\n");
+		//printf("now close SVSwitch from tempTimer\n");
 		call SVSwitch.close();
 		call TempResourceClient.release();
 	}
 
 	event void LightResourceTimer.fired() {
-		printf("now close SVSwitch from lightTimer\n");
+		//printf("now close SVSwitch from lightTimer\n");
 		call SVSwitch.close();
 		call LightResourceClient.release();
 	}
 
 	event void MicResourceTimer.fired() {
-		printf("now close SVSwitch from micTimer\n");
+		//printf("now close SVSwitch from micTimer\n");
 		call SVSwitch.close();
 		call MicResourceClient.release();
 	}
@@ -583,49 +590,49 @@ void printfflush() { }
 		// 打开电磁阀门
 		call SVSwitch.open();
 		call DS18B20ResourceTimer.startOneShot(SV_HOLD_PERIOD);
-		printf("DS18B20 open SV, hold on %d times\n", SV_HOLD_PERIOD);
+		//printf("DS18B20 open SV, hold on %d times\n", SV_HOLD_PERIOD);
 	}
 
 	event void HumiResourceClient.granted() {
 		// 打开电磁阀门
 		call SVSwitch.open();
 		call HumiResourceTimer.startOneShot(SV_HOLD_PERIOD);
-		printf("Humi open SV, hold on %d times\n", SV_HOLD_PERIOD);
+		//printf("Humi open SV, hold on %d times\n", SV_HOLD_PERIOD);
 	}
 
 	event void TempResourceClient.granted() {
 		// 打开电磁阀门
 		call SVSwitch.open();
 		call TempResourceTimer.startOneShot(SV_HOLD_PERIOD);
-		printf("Temp open SV, hold on %d times\n", SV_HOLD_PERIOD);
+		//printf("Temp open SV, hold on %d times\n", SV_HOLD_PERIOD);
 	}
 
 	event void LightResourceClient.granted() {
 		// 打开电磁阀门
 		call SVSwitch.open();
 		call LightResourceTimer.startOneShot(SV_HOLD_PERIOD);
-		printf("Light open SV, hold on %d times\n", SV_HOLD_PERIOD);
+		//printf("Light open SV, hold on %d times\n", SV_HOLD_PERIOD);
 	}
 
 	event void MicResourceClient.granted() {
 		// 打开电磁阀门
 		call SVSwitch.open();
 		call MicResourceTimer.startOneShot(SV_HOLD_PERIOD);
-		printf("Mic open SV, hold on %d times\n", SV_HOLD_PERIOD);
+		//printf("Mic open SV, hold on %d times\n", SV_HOLD_PERIOD);
 	}
 
 	task void check_sv() {
 		uint8_t local_val = gl.sv_default_status;
 		if (local_val == OFF) {
 			call SVSwitch.close();
-			printf("Now, close the switch, switch status: %d\n\n\n", call SVSwitch.getStatus());
+			//printf("Now, close the switch, switch status: %d\n\n\n", call SVSwitch.getStatus());
 		} else if (local_val == ON) {
 			call SVSwitch.open();
-			printf("Now, open the switch, switch status: %d\n\n\n", call SVSwitch.getStatus());
+			//printf("Now, open the switch, switch status: %d\n\n\n", call SVSwitch.getStatus());
 		} else if (local_val == AUTO) {
 		//	call SVSwitch.close();
 		// 	auto 就什么也不做
-		//	printf("Now, set auto\n");
+		//	//printf("Now, set auto\n");
 		} else {
 			;
 		}
@@ -646,7 +653,7 @@ void printfflush() { }
 		//} else if (local_val == AUTO) {
 		//	call SVSwitch.close();
 		// 	auto 就什么也不做
-		//	printf("Now, set auto\n");
+		//	//printf("Now, set auto\n");
 		//} else {
 		//	;
 		//}

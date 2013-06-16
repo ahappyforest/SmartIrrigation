@@ -28,7 +28,9 @@ enum {
 	YL69 = 0x02,             // 土壤湿度传感器
 	LIGHT = 0x03,            // 光照
 	THERMISTOR = 0x04,       // 空气中的温度
-	DS18B20 = 0x05           // 土壤中的温度
+	DS18B20 = 0x05,          // 土壤中的温度
+	// 新添加
+	WATERPUMP = 0x06,        // 水泵
 };
 
 typedef struct sensor_msg {

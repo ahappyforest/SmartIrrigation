@@ -10,4 +10,5 @@ test/build/
 Sensor/lib/build/
 .*.swp
 Mirror/build/
+waterpump/build/
 
