@@ -16,3 +16,6 @@ mts300cb资料 http://www-db.ics.uci.edu/pages/research/quasar/MTS-MDA%20Series%
 
 Known BUGS
 	- 用到了CTP协议(http://www.tinyos.net/tinyos-2.x/doc/html/tep123.html)和dissemination protocol(http://www.tinyos.net/tinyos-2.x/doc/html/tep118.html)， 但数据从节点到基站的响应(reply_msg_t)有<10%左右的丢包， 建议可以使用原生的AMSend对本项目的发送和接收进行替换.
+	- 远程烧写在我机器上测试有点问题， 一直不响应.
+
+建议在大规模应用的情况下使用远程烧写， DelugeC模块， 具体的例子可以参考我的一篇教程: http://forestgump.me/2012/10/tinyos-deluge-t2/， 注意远程烧写的电压要在2.7v以上.
