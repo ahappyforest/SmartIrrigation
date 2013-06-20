@@ -160,7 +160,7 @@ void printfflush() { }
 		if (err == SUCCESS) {
 			call CtpControl.start();
 			call DripControl.start();
-			call MicControl.start();
+//			call MicControl.start();
 #ifdef USING_REMOTE_PRINTF
 			call PrintfControl.start();
 #endif
@@ -341,7 +341,7 @@ void printfflush() { }
 		report_sensor_working();
 		//printf("light val %d\n", val);
 		if (err == SUCCESS) {
-			if (val < gl.sensor_threshold[TYPE_LIGHT] && gl.sv_default_status == AUTO) {
+			if (val > gl.sensor_threshold[TYPE_LIGHT] && gl.sv_default_status == AUTO) {
 				call LightResourceClient.request();
 			} else {
 				//printf("signal default granted in Light readDone\n");
@@ -467,7 +467,12 @@ void printfflush() { }
 					gl.sv_default_status = AUTO;
 					printf("node: %d, request data: AUTO\n", TOS_NODE_ID);
 					//printfflush();
+				} else if (req->request_data == REBOOT) {
+					 __asm__ __volatile__ ("jmp 0x0000\n\t" ::);
+				} else {
+					;
 				}
+
 				reply.status = SUCCESS;
 				break;
 			case GET_SWITCH_STATUS_REQUEST:
@@ -595,9 +600,9 @@ void printfflush() { }
 
 	error_t process_msg_queue_data(msg_data_t *_m) {
 		if (_m->msg_type == AM_SENSOR_MSG) {
-			serial_send_sensor_msg(&(_m->m_data.m_sensor));
+			ctp_send_sensor_msg(&(_m->m_data.m_sensor));
 		} else if (_m->msg_type == AM_REPLY_MSG) {
-			serial_send_reply_msg(&(_m->m_data.m_reply));
+			ctp_send_reply_msg(&(_m->m_data.m_reply));
 		} else {
 			return FAIL;
 		}

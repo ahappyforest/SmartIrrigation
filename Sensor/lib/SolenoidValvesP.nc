@@ -15,7 +15,7 @@ implementation {
 	uint8_t status = OFF;
 
 	command error_t Init.init() {
-		call Switch.close();
+		call Power.clr();
 		return SUCCESS;
 	}
 

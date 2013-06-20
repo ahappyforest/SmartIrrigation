@@ -5,6 +5,7 @@
 #define OFF 0
 #define ON  1
 #define AUTO 2
+#define REBOOT 3
 
 enum {
 	AM_SENSOR_MSG = 7,
