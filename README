@@ -1,1 +1,18 @@
 这是一个基于TinyOS的智能灌溉系统， 硬件部分代码.
+
+硬件平台是Micaz节点, 系统由水泵、电磁阀门、湿度传感器、温度传感器、光照传感器以及一些辅助的水管组成， 其中温度传感器和光照传感器来自与是Crossbow的mts300CB传感器扩展板. 其它的如水泵和电磁阀门的控制是直接将管脚引出， 来控制IO实现的， 如果你正好也在做此类项目， 那么需要到Sensor/lib/PinConfig.h中查到我的管脚设置.
+
+micaz节点资料 http://www-db.ics.uci.edu/pages/research/quasar/MPR-MIB%20Series%20User%20Manual%207430-0021-06_A.pdf
+mts300cb资料 http://www-db.ics.uci.edu/pages/research/quasar/MTS-MDA%20Series%20User%20Manual%207430-0020-03_A.pdf
+
+为了节能， 我分别使用了三极管和MOS管作为开关使用， 三极管控制的是一些功率比较小的传感器， 如湿度传感器， 使用的是PNP型， 因此基极是低电平有效的， 而MOS管用来控制电磁阀门和水泵， 使用的是IRF540N， 注意它的启动电压在4v以上， 因此单片机最好工作在5v， 否则还需要对单片机IO口的高点平再次进行升压.
+
+目录结构是这样的:
+	- Root      基站代码
+	- waterpump 水泵控制器
+	- Sensor    普通的节点
+
+关键的头文件是SmartIrrigation.h， 定义了通信的消息以及一些常量， 这个定义和上位机软件层的交互比较紧密.
+
+Known BUGS
+	- 用到了CTP协议(http://www.tinyos.net/tinyos-2.x/doc/html/tep123.html)和dissemination protocol(http://www.tinyos.net/tinyos-2.x/doc/html/tep118.html)， 但数据从节点到基站的响应(reply_msg_t)有<10%左右的丢包， 建议可以使用原生的AMSend对本项目的发送和接收进行替换.
